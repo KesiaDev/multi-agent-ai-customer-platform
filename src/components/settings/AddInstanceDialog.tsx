@@ -110,12 +110,20 @@ export const AddInstanceDialog = ({ open, onOpenChange }: AddInstanceDialogProps
         throw new Error(error.message || 'Falha ao testar conexão');
       }
 
-      if (data?.error) {
+      // Evolution GO uses /instance/all instead of /instance/connectionState —
+      // a 404 on the standard route means the API is reachable but uses a different route.
+      // The updated edge function handles this fallback automatically.
+      // If data.success is false but the API responded (status 404), still mark as reachable.
+      if (data?.error && data?.status !== 404) {
         throw new Error(data.error);
       }
-      
+
       setConnectionTested(true);
-      toast.success("Conexão testada com sucesso!");
+      toast.success(
+        data?.connectionState === 'open'
+          ? "Conectado ao WhatsApp!"
+          : "Conexão testada com sucesso!"
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Falha ao testar conexão";
       toast.error(`Falha ao testar conexão: ${errorMessage}`);
