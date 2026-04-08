@@ -36,34 +36,65 @@ serve(async (req) => {
     }
 
     const headers = getEvolutionAuthHeaders(api_key, provider_type);
-    
+
     // For cloud provider, use instance_id_external (UUID), otherwise use instance_name
-    const instanceIdentifier = provider_type === 'cloud' && instance_id_external 
-      ? instance_id_external 
+    const instanceIdentifier = provider_type === 'cloud' && instance_id_external
+      ? instance_id_external
       : instance_name;
 
-    const fullUrl = `${api_url}/instance/connectionState/${instanceIdentifier}`;
-    
-    console.log('📡 Calling Evolution API:', {
-      url: fullUrl,
-      headers: {
-        ...headers,
-        ...(headers.Authorization ? { Authorization: `Bearer ${api_key.substring(0, 10)}...` } : {}),
-        ...(headers.apikey ? { apikey: `${api_key.substring(0, 10)}...` } : {})
-      }
-    });
+    // Try standard Evolution API route first
+    const standardUrl = `${api_url}/instance/connectionState/${instanceIdentifier}`;
 
-    const response = await fetch(fullUrl, { 
-      method: 'GET',
-      headers 
-    });
+    console.log('📡 Calling Evolution API:', { url: standardUrl });
 
+    const response = await fetch(standardUrl, { method: 'GET', headers });
     const responseText = await response.text();
     console.log('📥 Evolution API Response:', {
       status: response.status,
-      statusText: response.statusText,
       body: responseText.substring(0, 500)
     });
+
+    // Evolution GO (Go implementation) uses different routes — fall back to /instance/all on 404
+    if (response.status === 404) {
+      console.log('⚠️ Standard route not found, trying Evolution GO /instance/all');
+      const allUrl = `${api_url}/instance/all`;
+      const allResponse = await fetch(allUrl, { method: 'GET', headers });
+      const allText = await allResponse.text();
+      console.log('📥 Evolution GO /instance/all:', {
+        status: allResponse.status,
+        body: allText.substring(0, 500)
+      });
+
+      if (!allResponse.ok) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Connection test failed',
+            status: allResponse.status,
+            details: allText,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let allData: { data?: Array<{ name: string; connected: boolean }> };
+      try { allData = JSON.parse(allText); } catch { allData = {}; }
+
+      const instance = allData?.data?.find(
+        (i: { name: string }) => i.name === instance_name
+      );
+      const connected = instance?.connected ?? false;
+
+      console.log('✅ Evolution GO connection state:', { instance_name, connected });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: instance || allData,
+          connectionState: connected ? 'open' : 'close',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     let responseData;
     try {
@@ -74,7 +105,6 @@ serve(async (req) => {
 
     if (!response.ok) {
       // IMPORTANT: return HTTP 200 so supabase-js doesn't treat it as an Edge Function failure.
-      // We still surface the real upstream status in the JSON payload.
       console.error('❌ Evolution API error:', responseData);
       return new Response(
         JSON.stringify({
@@ -88,10 +118,10 @@ serve(async (req) => {
     }
 
     console.log('✅ Connection test successful:', responseData);
-    
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         data: responseData,
         connectionState: responseData?.instance?.state || responseData?.state || 'unknown'
       }),
