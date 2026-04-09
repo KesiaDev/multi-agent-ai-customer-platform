@@ -1,0 +1,1 @@
+UPDATE whatsapp_instance_secrets SET api_url = 'https://evolution-go-production-ba5d.up.railway.app' WHERE instance_id = 'ee8e978a-faf3-41df-8256-a8b0a3884319';
