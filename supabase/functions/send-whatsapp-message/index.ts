@@ -16,14 +16,7 @@ interface SendMessageRequest {
   quotedMessageId?: string;
 }
 
-// Helper function to get Evolution API auth headers based on provider type
-function getEvolutionAuthHeaders(apiKey: string, providerType: string): Record<string, string> {
-  // Evolution Cloud confirmou: ambos usam header 'apikey'
-  return { apikey: apiKey };
-}
-
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -62,7 +55,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get conversation details including instance info and provider_type
+    // Get conversation details including instance info
     const { data: conversation, error: convError } = await supabase
       .from('whatsapp_conversations')
       .select(`
@@ -109,28 +102,46 @@ Deno.serve(async (req) => {
     const instanceIdExternal = (conversation as any).whatsapp_instances.instance_id_external;
     const contact = (conversation as any).whatsapp_contacts;
 
-    // For Cloud, use instance_id_external (UUID) instead of instance_name
-    const instanceIdentifier = providerType === 'cloud' && instanceIdExternal
-      ? instanceIdExternal
-      : instanceName;
+    console.log('[send-whatsapp-message] Sending to:', contact.phone_number, 'Provider:', providerType);
 
-    console.log('[send-whatsapp-message] Sending to:', contact.phone_number, 'Provider:', providerType, 'Instance:', instanceIdentifier);
-
-    // Determine destination number format
     const destinationNumber = getDestinationNumber(contact.phone_number);
 
-    // Build request for Evolution API
-    const { endpoint, requestBody } = buildEvolutionRequest(
-      secrets.api_url,
-      instanceIdentifier,
-      destinationNumber,
-      body
-    );
+    let baseUrl = secrets.api_url.endsWith('/') ? secrets.api_url.slice(0, -1) : secrets.api_url;
+    baseUrl = baseUrl.replace(/\/manager$/, '');
 
-    console.log('[send-whatsapp-message] Evolution API endpoint:', endpoint);
+    // Detect if this is Evolution GO by checking if /send/text route exists
+    const isEvolutionGO = await detectEvolutionGO(baseUrl, secrets.api_key);
+    console.log('[send-whatsapp-message] Is Evolution GO:', isEvolutionGO);
 
-    // Get correct auth headers based on provider type
-    const authHeaders = getEvolutionAuthHeaders(secrets.api_key, providerType);
+    let endpoint: string;
+    let requestBody: any;
+    let authHeaders: Record<string, string>;
+
+    if (isEvolutionGO) {
+      // Evolution GO: uses instance token for auth & different routes (/send/*)
+      const instanceToken = await getEvolutionGOInstanceToken(baseUrl, secrets.api_key, instanceName);
+      if (!instanceToken) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Could not retrieve instance token from Evolution GO' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      authHeaders = { apikey: instanceToken };
+      const result = buildEvolutionGORequest(baseUrl, destinationNumber, body);
+      endpoint = result.endpoint;
+      requestBody = result.requestBody;
+    } else {
+      // Standard Evolution API: uses global API key & /message/* routes
+      const instanceIdentifier = providerType === 'cloud' && instanceIdExternal
+        ? instanceIdExternal
+        : instanceName;
+      authHeaders = { apikey: secrets.api_key };
+      const result = buildEvolutionAPIRequest(baseUrl, instanceIdentifier, destinationNumber, body);
+      endpoint = result.endpoint;
+      requestBody = result.requestBody;
+    }
+
+    console.log('[send-whatsapp-message] Endpoint:', endpoint);
 
     // Send to Evolution API
     const evolutionResponse = await fetch(endpoint, {
@@ -152,14 +163,18 @@ Deno.serve(async (req) => {
     }
 
     const evolutionData = await evolutionResponse.json();
-    console.log('[send-whatsapp-message] Evolution API response:', evolutionData);
+    console.log('[send-whatsapp-message] Evolution API response:', JSON.stringify(evolutionData).substring(0, 500));
 
-    // Extract message ID from Evolution API response
-    const messageId = evolutionData.key?.id || `msg_${Date.now()}`;
+    // Extract message ID - Evolution GO uses different response structure
+    let messageId: string;
+    if (isEvolutionGO) {
+      messageId = evolutionData.data?.Info?.ID || evolutionData.key?.id || `msg_${Date.now()}`;
+    } else {
+      messageId = evolutionData.key?.id || `msg_${Date.now()}`;
+    }
 
-    // Extract media URL from Evolution API response
+    // Extract media URL from response
     let extractedMediaUrl: string | null = null;
-    
     if (body.messageType === 'audio' && evolutionData.message?.audioMessage?.url) {
       extractedMediaUrl = evolutionData.message.audioMessage.url;
     } else if (body.messageType === 'image' && evolutionData.message?.imageMessage?.url) {
@@ -168,10 +183,6 @@ Deno.serve(async (req) => {
       extractedMediaUrl = evolutionData.message.videoMessage.url;
     } else if (body.messageType === 'document' && evolutionData.message?.documentMessage?.url) {
       extractedMediaUrl = evolutionData.message.documentMessage.url;
-    }
-
-    if (extractedMediaUrl) {
-      console.log('[send-whatsapp-message] Extracted media URL:', extractedMediaUrl);
     }
 
     // Save message to database
@@ -234,78 +245,147 @@ Deno.serve(async (req) => {
   }
 });
 
+// Cache for Evolution GO detection and instance tokens (per function invocation)
+const evolutionGOCache = new Map<string, boolean>();
+const instanceTokenCache = new Map<string, string>();
+
+async function detectEvolutionGO(baseUrl: string, apiKey: string): Promise<boolean> {
+  if (evolutionGOCache.has(baseUrl)) return evolutionGOCache.get(baseUrl)!;
+  
+  try {
+    // Try the /instance/all route with the global key
+    // Evolution GO returns JSON with data array; standard Evolution API also supports this
+    // But Evolution GO has /send/* routes while standard has /message/sendText/*
+    // We detect by checking if /swagger/doc.json exists (Evolution GO specific)
+    const res = await fetch(`${baseUrl}/swagger/doc.json`, { 
+      method: 'GET',
+      headers: { apikey: apiKey },
+    });
+    const isGO = res.ok;
+    evolutionGOCache.set(baseUrl, isGO);
+    return isGO;
+  } catch {
+    evolutionGOCache.set(baseUrl, false);
+    return false;
+  }
+}
+
+async function getEvolutionGOInstanceToken(baseUrl: string, globalApiKey: string, instanceName: string): Promise<string | null> {
+  const cacheKey = `${baseUrl}:${instanceName}`;
+  if (instanceTokenCache.has(cacheKey)) return instanceTokenCache.get(cacheKey)!;
+
+  try {
+    const res = await fetch(`${baseUrl}/instance/all`, {
+      headers: { apikey: globalApiKey },
+    });
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const instances = data?.data || data || [];
+    const instance = Array.isArray(instances) 
+      ? instances.find((i: any) => i.name === instanceName)
+      : null;
+
+    if (instance?.token) {
+      instanceTokenCache.set(cacheKey, instance.token);
+      return instance.token;
+    }
+    return null;
+  } catch (e) {
+    console.error('[send] Error fetching instance token:', e);
+    return null;
+  }
+}
+
 function getDestinationNumber(phoneNumber: string): string {
-  // If phone ends with @lid (LinkedIn format), use complete format
   if (phoneNumber.includes('@lid')) {
     return phoneNumber;
   }
-  // Otherwise, use only digits
   return phoneNumber.replace(/\D/g, '');
 }
 
-function buildEvolutionRequest(
-  apiUrl: string,
+// Evolution GO routes (/send/*)
+function buildEvolutionGORequest(
+  baseUrl: string,
+  number: string,
+  body: SendMessageRequest
+): { endpoint: string; requestBody: any } {
+  switch (body.messageType) {
+    case 'text': {
+      const requestBody: any = { number, text: body.content };
+      if (body.quotedMessageId) {
+        requestBody.quoted = { key: { id: body.quotedMessageId } };
+      }
+      return { endpoint: `${baseUrl}/send/text`, requestBody };
+    }
+
+    case 'audio': {
+      let audioData: string | undefined;
+      if (body.mediaBase64) {
+        audioData = body.mediaBase64.startsWith('data:')
+          ? body.mediaBase64.split(',')[1] || ''
+          : body.mediaBase64;
+      } else if (body.mediaUrl) {
+        audioData = body.mediaUrl;
+      }
+      if (!audioData) throw new Error('Missing audio data');
+      
+      return {
+        endpoint: `${baseUrl}/send/media`,
+        requestBody: { number, url: audioData, type: 'audio', caption: '' },
+      };
+    }
+
+    case 'image':
+    case 'video':
+    case 'document': {
+      const requestBody: any = {
+        number,
+        url: body.mediaBase64 || body.mediaUrl,
+        type: body.messageType,
+      };
+      if (body.content) requestBody.caption = body.content;
+      if (body.messageType === 'document' && body.fileName) {
+        requestBody.filename = body.fileName;
+      }
+      return { endpoint: `${baseUrl}/send/media`, requestBody };
+    }
+
+    default:
+      throw new Error(`Unsupported message type: ${body.messageType}`);
+  }
+}
+
+// Standard Evolution API routes (/message/*)
+function buildEvolutionAPIRequest(
+  baseUrl: string,
   instanceName: string,
   number: string,
   body: SendMessageRequest
 ): { endpoint: string; requestBody: any } {
-  // Remove trailing slash
-  let baseUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
-  
-  // Remove /manager suffix if present (message endpoints are at root level)
-  baseUrl = baseUrl.replace(/\/manager$/, '');
-
   switch (body.messageType) {
     case 'text': {
-      const requestBody: any = {
-        number,
-        text: body.content,
-      };
-
+      const requestBody: any = { number, text: body.content };
       if (body.quotedMessageId) {
-        requestBody.quoted = {
-          key: {
-            id: body.quotedMessageId,
-          },
-        };
+        requestBody.quoted = { key: { id: body.quotedMessageId } };
       }
-
-      return {
-        endpoint: `${baseUrl}/message/sendText/${instanceName}`,
-        requestBody,
-      };
+      return { endpoint: `${baseUrl}/message/sendText/${instanceName}`, requestBody };
     }
 
     case 'audio': {
-      // Evolution API expects either a plain base64 string or a public URL
       let audioData: string | undefined;
-
       if (body.mediaBase64) {
-        // Strip possible data URI prefix and keep only the base64 payload
-        const base64 = body.mediaBase64.startsWith('data:')
+        audioData = body.mediaBase64.startsWith('data:')
           ? body.mediaBase64.split(',')[1] || ''
           : body.mediaBase64;
-
-        audioData = base64;
       } else if (body.mediaUrl) {
         audioData = body.mediaUrl;
       }
+      if (!audioData) throw new Error('Missing audio data');
 
-      if (!audioData) {
-        throw new Error('Missing audio data');
-      }
-
-      console.log('[send-whatsapp-message] Audio payload prepared:', {
-        type: body.mediaBase64 ? 'base64' : 'url',
-        length: audioData.length,
-      });
-      
       return {
         endpoint: `${baseUrl}/message/sendWhatsAppAudio/${instanceName}`,
-        requestBody: {
-          number,
-          audio: audioData,
-        },
+        requestBody: { number, audio: audioData },
       };
     }
 
@@ -317,19 +397,11 @@ function buildEvolutionRequest(
         mediatype: body.messageType,
         media: body.mediaBase64 || body.mediaUrl,
       };
-
-      if (body.content) {
-        requestBody.caption = body.content;
-      }
-
+      if (body.content) requestBody.caption = body.content;
       if (body.messageType === 'document' && body.fileName) {
         requestBody.fileName = body.fileName;
       }
-
-      return {
-        endpoint: `${baseUrl}/message/sendMedia/${instanceName}`,
-        requestBody,
-      };
+      return { endpoint: `${baseUrl}/message/sendMedia/${instanceName}`, requestBody };
     }
 
     default:
