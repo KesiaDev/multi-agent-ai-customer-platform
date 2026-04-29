@@ -158,6 +158,19 @@ Deno.serve(async (req) => {
 
     console.log('[invite-team-member] ✅ Invite complete for', email);
 
+    // Audit log — fire-and-forget
+    supabaseAdmin
+      .rpc('write_audit_log', {
+        p_organization_id: orgId,
+        p_user_id:         caller.id,
+        p_action:          'member.invite',
+        p_resource_type:   'profile',
+        p_resource_id:     invitedUserId,
+        p_metadata:        { email, full_name: fullName, role },
+        p_ip_address:      req.headers.get('x-forwarded-for') ?? null,
+      })
+      .catch((err: Error) => console.error('[invite-team-member] Audit log error:', err));
+
     return new Response(
       JSON.stringify({
         success: true,
