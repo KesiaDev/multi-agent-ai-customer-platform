@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useProjectSetup } from '@/hooks/useProjectSetup';
 
 type AppRole = 'admin' | 'supervisor' | 'agent';
+type OrgRole = 'owner' | 'admin' | 'agent';
 
 interface Profile {
   id: string;
@@ -13,8 +14,17 @@ interface Profile {
   avatar_url: string | null;
   status: 'online' | 'offline' | 'away' | 'busy';
   is_approved: boolean;
+  organization_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  status: string;
 }
 
 interface AuthContextType {
@@ -22,6 +32,8 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   role: AppRole | null;
+  organization: Organization | null;
+  organizationRole: OrgRole | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
@@ -32,6 +44,7 @@ interface AuthContextType {
   isSupervisor: boolean;
   isAgent: boolean;
   isApproved: boolean;
+  isOwner: boolean;
   shouldRedirectToSetup: boolean;
 }
 
@@ -42,6 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [organizationRole, setOrganizationRole] = useState<OrgRole | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasRedirectedToSetup, setHasRedirectedToSetup] = useState(false);
   const { toast } = useToast();
@@ -67,11 +82,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      if (data?.profileCreated || data?.roleCreated) {
-        console.log('✅ [AuthContext] Profile/role auto-created:', data);
+      if (data?.profileCreated || data?.roleCreated || data?.addedToOrg) {
+        console.log('✅ [AuthContext] Profile/role/org auto-created:', data);
+        // Load organization from the response directly if available
+        if (data?.organization) {
+          setOrganization(data.organization as Organization);
+          setOrganizationRole(data.organizationRole as OrgRole);
+        }
         return true;
       }
-      
+
       return false;
     } catch (error) {
       console.error('❌ [AuthContext] Error auto-creating profile:', error);
@@ -115,6 +135,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('⚠️ [AuthContext] No role found for user:', userId);
       }
 
+      // Load organization membership
+      const { data: membershipData, error: membershipError } = await supabase
+        .from('organization_members')
+        .select('role, organizations(id, name, slug, plan, status)')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!membershipError && membershipData) {
+        const org = membershipData.organizations as unknown as Organization;
+        setOrganization(org ?? null);
+        setOrganizationRole(membershipData.role as OrgRole);
+        console.log('✅ [AuthContext] Organization loaded:', org?.name);
+      }
+
       // If profile OR role is missing, try to auto-create them
       if (!profileData || !roleData) {
         console.log('⚠️ [AuthContext] Profile or role missing, attempting auto-creation...');
@@ -153,6 +187,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
           setRole(null);
+          setOrganization(null);
+          setOrganizationRole(null);
         }
       }
     );
@@ -297,6 +333,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setProfile(null);
     setRole(null);
+    setOrganization(null);
+    setOrganizationRole(null);
     setHasRedirectedToSetup(false);
     toast({
       title: "Logout realizado",
@@ -313,9 +351,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = role === 'admin';
   const isSupervisor = role === 'supervisor';
   const isAgent = role === 'agent';
-  const isApproved = profile?.is_approved ?? true; // Default to true for safety
-  
-  // Determine if admin should be redirected to setup (only once per session)
+  const isOwner = organizationRole === 'owner';
+  const isApproved = profile?.is_approved ?? true;
+
   const shouldRedirectToSetup = isAdmin && !isCheckingConfig && isConfigured === false && !hasRedirectedToSetup;
 
   console.log('🔐 [AuthContext] Current auth state:', { 
@@ -333,6 +371,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     profile,
     role,
+    organization,
+    organizationRole,
     isLoading,
     signIn,
     signUp,
@@ -343,6 +383,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isSupervisor,
     isAgent,
     isApproved,
+    isOwner,
     shouldRedirectToSetup,
   };
 

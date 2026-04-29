@@ -16,10 +16,8 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get user from JWT
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      console.error('❌ Missing authorization header');
       return new Response(JSON.stringify({ error: 'Missing authorization' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -31,20 +29,21 @@ Deno.serve(async (req) => {
     );
 
     if (userError || !user) {
-      console.error('❌ Invalid token:', userError);
       return new Response(JSON.stringify({ error: 'Invalid token' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    console.log('🔍 Checking profile/role for user:', user.id);
+    console.log('🔍 ensure-user-profile for:', user.id);
 
     let profileCreated = false;
     let roleCreated = false;
     let profileAutoApproved = false;
+    let organizationCreated = false;
+    let addedToOrg = false;
 
-    // Check if approval is required
+    // Check approval config
     const { data: approvalConfig } = await supabaseAdmin
       .from('project_config')
       .select('value')
@@ -52,31 +51,24 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const requireApproval = approvalConfig?.value === 'true';
-    console.log('📋 Approval config:', { requireApproval });
 
-    // Count existing profiles to determine if first user
+    // Count existing profiles
     const { count: profileCount } = await supabaseAdmin
       .from('profiles')
       .select('*', { count: 'exact', head: true });
 
     const isFirstUser = profileCount === null || profileCount === 0;
-    console.log('👤 Profile count:', profileCount, 'Is first user:', isFirstUser);
 
-    // Check if profile exists
+    // ── Profile ──────────────────────────────────────────────
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
-      .select('id, is_approved')
+      .select('id, is_approved, organization_id')
       .eq('id', user.id)
       .maybeSingle();
 
     if (!existingProfile) {
-      console.log('⚠️ Profile missing, creating...');
-      
-      // First user always approved; others depend on config
       const isApproved = isFirstUser ? true : !requireApproval;
-      console.log('📝 Creating profile with is_approved:', isApproved);
-      
-      // Create profile
+
       const { error: profileError } = await supabaseAdmin
         .from('profiles')
         .insert({
@@ -87,40 +79,20 @@ Deno.serve(async (req) => {
           is_approved: isApproved
         });
 
-      if (profileError) {
-        console.error('❌ Error creating profile:', profileError);
-      } else {
-        profileCreated = true;
-        console.log('✅ Profile created with is_approved:', isApproved);
-      }
-    } else {
-      // Profile exists - check if first/only user needs auto-approval fix
-      // This handles cases where profile was created without is_approved
-      if (existingProfile.is_approved === false || existingProfile.is_approved === null) {
-        // Re-count to check if this is the only user
-        const { count: totalProfiles } = await supabaseAdmin
-          .from('profiles')
-          .select('*', { count: 'exact', head: true });
+      if (!profileError) profileCreated = true;
+      else console.error('❌ Error creating profile:', profileError);
+    } else if (existingProfile.is_approved === false || existingProfile.is_approved === null) {
+      const { count: totalProfiles } = await supabaseAdmin
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
 
-        // If only one profile exists and it's not approved, auto-approve (first admin fix)
-        if (totalProfiles === 1) {
-          console.log('🔧 Auto-approving first/only user...');
-          const { error: approveError } = await supabaseAdmin
-            .from('profiles')
-            .update({ is_approved: true })
-            .eq('id', user.id);
-
-          if (!approveError) {
-            profileAutoApproved = true;
-            console.log('✅ First user auto-approved');
-          } else {
-            console.error('❌ Error auto-approving:', approveError);
-          }
-        }
+      if (totalProfiles === 1) {
+        await supabaseAdmin.from('profiles').update({ is_approved: true }).eq('id', user.id);
+        profileAutoApproved = true;
       }
     }
 
-    // Check if role exists
+    // ── Role ─────────────────────────────────────────────────
     const { data: existingRole } = await supabaseAdmin
       .from('user_roles')
       .select('role')
@@ -128,38 +100,109 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!existingRole) {
-      console.log('⚠️ Role missing, assigning...');
-      
-      // Re-count profiles after potential creation
       const { count: currentProfileCount } = await supabaseAdmin
         .from('profiles')
         .select('*', { count: 'exact', head: true });
 
       const assignedRole = (currentProfileCount === null || currentProfileCount <= 1) ? 'admin' : 'agent';
-      console.log(`📝 Assigning role: ${assignedRole} (total profiles: ${currentProfileCount})`);
 
       const { error: roleError } = await supabaseAdmin
         .from('user_roles')
-        .insert({
-          user_id: user.id,
-          role: assignedRole
-        });
+        .insert({ user_id: user.id, role: assignedRole });
 
-      if (roleError) {
-        console.error('❌ Error creating role:', roleError);
-      } else {
-        roleCreated = true;
-        console.log(`✅ Role ${assignedRole} assigned`);
+      if (!roleError) roleCreated = true;
+      else console.error('❌ Error creating role:', roleError);
+    }
+
+    // ── Organization ─────────────────────────────────────────
+    // Check if user already belongs to an org
+    const { data: existingMembership } = await supabaseAdmin
+      .from('organization_members')
+      .select('organization_id, role')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!existingMembership) {
+      // First user: create a new organization and become owner
+      // Subsequent users invited via invite link will be assigned by the invite flow
+      if (isFirstUser || profileCreated) {
+        // Determine if this is truly the first org ever
+        const { count: orgCount } = await supabaseAdmin
+          .from('organizations')
+          .select('*', { count: 'exact', head: true });
+
+        if (orgCount === null || orgCount === 0) {
+          // Create first organization
+          const companyName = user.user_metadata?.company_name || user.email?.split('@')[1]?.split('.')[0] || 'Minha Empresa';
+          const slug = companyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 50);
+
+          const { data: newOrg, error: orgError } = await supabaseAdmin
+            .from('organizations')
+            .insert({ name: companyName, slug: `${slug}-${Date.now()}`, plan: 'conexao', status: 'active' })
+            .select('id')
+            .single();
+
+          if (!orgError && newOrg) {
+            organizationCreated = true;
+
+            // Add user as owner
+            await supabaseAdmin.from('organization_members').insert({
+              organization_id: newOrg.id,
+              user_id: user.id,
+              role: 'owner'
+            });
+
+            // Link org to profile
+            await supabaseAdmin.from('profiles').update({ organization_id: newOrg.id }).eq('id', user.id);
+
+            addedToOrg = true;
+            console.log('✅ Created organization:', newOrg.id);
+          }
+        } else {
+          // Org already exists (seeded or created) — add user as member
+          // This path handles the existing NandiDev seed org
+          const { data: firstOrg } = await supabaseAdmin
+            .from('organizations')
+            .select('id')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .single();
+
+          if (firstOrg) {
+            const memberRole = (existingRole?.role === 'admin' || (!existingRole && isFirstUser)) ? 'owner' : 'agent';
+            const { error: memberError } = await supabaseAdmin
+              .from('organization_members')
+              .insert({ organization_id: firstOrg.id, user_id: user.id, role: memberRole })
+              .select()
+              .maybeSingle();
+
+            if (!memberError) {
+              addedToOrg = true;
+              await supabaseAdmin.from('profiles').update({ organization_id: firstOrg.id }).eq('id', user.id);
+            }
+          }
+        }
       }
     }
+
+    // Return current organization context for frontend
+    const { data: membership } = await supabaseAdmin
+      .from('organization_members')
+      .select('organization_id, role, organizations(id, name, slug, plan, status)')
+      .eq('user_id', user.id)
+      .maybeSingle();
 
     return new Response(JSON.stringify({
       success: true,
       profileCreated,
       roleCreated,
       profileAutoApproved,
+      organizationCreated,
+      addedToOrg,
       existingProfile: !!existingProfile,
-      existingRole: !!existingRole
+      existingRole: !!existingRole,
+      organization: membership?.organizations ?? null,
+      organizationRole: membership?.role ?? null,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
