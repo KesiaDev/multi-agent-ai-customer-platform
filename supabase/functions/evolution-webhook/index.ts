@@ -643,7 +643,7 @@ async function processMessageUpsert(payload: EvolutionWebhookPayload, supabase: 
     // Get instance data - try by instance_name first (self-hosted), then by instance_id_external (Cloud)
     let { data: instanceData } = await supabase
       .from('whatsapp_instances')
-      .select('id, instance_name, instance_id_external, provider_type, status')
+      .select('id, instance_name, instance_id_external, provider_type, status, organization_id')
       .eq('instance_name', instance)
       .maybeSingle();
 
@@ -651,7 +651,7 @@ async function processMessageUpsert(payload: EvolutionWebhookPayload, supabase: 
     if (!instanceData) {
       const { data: cloudInstance } = await supabase
         .from('whatsapp_instances')
-        .select('id, instance_name, instance_id_external, provider_type, status')
+        .select('id, instance_name, instance_id_external, provider_type, status, organization_id')
         .eq('instance_id_external', instance)
         .maybeSingle();
       instanceData = cloudInstance;
@@ -792,6 +792,11 @@ async function processMessageUpsert(payload: EvolutionWebhookPayload, supabase: 
 
     console.log('[evolution-webhook] Message saved successfully');
 
+    // GAP-05: Increment monthly message counter for this organization
+    if (instanceData.organization_id) {
+      incrementUsageMetric(supabase, instanceData.organization_id, 'messages_count');
+    }
+
     // Trigger automatic audio transcription for audio messages (fire-and-forget)
     if (messageType === 'audio' && mediaUrl) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -930,6 +935,81 @@ async function processConnectionUpdate(payload: EvolutionWebhookPayload, supabas
   }
 }
 
+// ── GAP-06: Webhook secret validation ────────────────────────────────────────
+// Evolution API is configured to send the instance's webhook_secret in the
+// x-webhook-secret header. When webhook_security_enabled is true on the instance,
+// requests without a valid secret are rejected with HTTP 401.
+async function validateWebhookSecret(
+  req: Request,
+  instanceName: string,
+  supabase: any
+): Promise<{ allowed: boolean }> {
+  const providedSecret = req.headers.get('x-webhook-secret');
+
+  // Resolve instance record (self-hosted: instance_name, Cloud: instance_id_external)
+  let { data: instanceData } = await supabase
+    .from('whatsapp_instances')
+    .select('id')
+    .eq('instance_name', instanceName)
+    .maybeSingle();
+
+  if (!instanceData) {
+    const { data: cloud } = await supabase
+      .from('whatsapp_instances')
+      .select('id')
+      .eq('instance_id_external', instanceName)
+      .maybeSingle();
+    instanceData = cloud;
+  }
+
+  if (!instanceData) {
+    console.error('[evolution-webhook] ❌ Instance not found for secret validation:', instanceName);
+    return { allowed: false };
+  }
+
+  const { data: secrets } = await supabase
+    .from('whatsapp_instance_secrets')
+    .select('webhook_secret, webhook_security_enabled')
+    .eq('instance_id', instanceData.id)
+    .maybeSingle();
+
+  if (!secrets?.webhook_security_enabled) {
+    // Soft mode: log a warning but allow — admin must flip the flag to enforce
+    if (!providedSecret) {
+      console.warn(`[evolution-webhook] ⚠️  No x-webhook-secret for ${instanceName}. Set webhook_security_enabled=true to enforce.`);
+    }
+    return { allowed: true };
+  }
+
+  // Hard mode: secret must match exactly
+  if (providedSecret !== secrets.webhook_secret) {
+    console.error(`[evolution-webhook] ❌ Invalid webhook secret for ${instanceName}`);
+    return { allowed: false };
+  }
+
+  return { allowed: true };
+}
+
+// ── GAP-05: Usage metric increment (fire-and-forget) ─────────────────────────
+function incrementUsageMetric(
+  supabase: any,
+  organizationId: string,
+  field: 'messages_count' | 'conversations_count' | 'ai_calls_count'
+): void {
+  const now = new Date();
+  supabase
+    .rpc('increment_usage_metric', {
+      p_organization_id: organizationId,
+      p_year:  now.getUTCFullYear(),
+      p_month: now.getUTCMonth() + 1,
+      p_field: field,
+    })
+    .then(({ error }: { error: any }) => {
+      if (error) console.error('[usage-metrics] RPC error:', error);
+    })
+    .catch((err: Error) => console.error('[usage-metrics] Error:', err));
+}
+
 // Process message edit
 async function processMessageEdit(payload: EvolutionWebhookPayload, supabase: any) {
   try {
@@ -1005,6 +1085,15 @@ Deno.serve(async (req) => {
 
     const payload: EvolutionWebhookPayload = await req.json();
     console.log('[evolution-webhook] Event received:', payload.event, 'Instance:', payload.instance);
+
+    // GAP-06: Validate webhook secret before any processing
+    const { allowed } = await validateWebhookSecret(req, payload.instance, supabase);
+    if (!allowed) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
 
     // Route to appropriate handler
     switch (payload.event) {
