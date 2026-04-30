@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,13 +44,18 @@ const PLANS = [
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultPlan?: string;
 }
 
-export function SubscriptionCheckoutDialog({ open, onOpenChange }: Props) {
+export function SubscriptionCheckoutDialog({ open, onOpenChange, defaultPlan = 'equipe' }: Props) {
   const [step, setStep] = useState<'plan' | 'payment' | 'done'>('plan');
-  const [selectedPlan, setSelectedPlan] = useState('equipe');
+  const [selectedPlan, setSelectedPlan] = useState(defaultPlan);
   const [isLoading, setIsLoading] = useState(false);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (open) setSelectedPlan(defaultPlan);
+  }, [open, defaultPlan]);
 
   const [form, setForm] = useState({
     name: '',
