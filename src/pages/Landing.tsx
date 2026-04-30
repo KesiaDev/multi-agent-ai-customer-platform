@@ -343,14 +343,15 @@ export default function Landing() {
               ))}
             </ul>
             <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                size="lg"
-                onClick={() => openCheckout()}
-                className="bg-green-500 hover:bg-green-600 text-white px-8 h-12 text-base"
-              >
-                Quero melhorar meu atendimento
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
+              <a href="#planos">
+                <Button
+                  size="lg"
+                  className="bg-green-500 hover:bg-green-600 text-white px-8 h-12 text-base"
+                >
+                  Quero melhorar meu atendimento
+                  <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              </a>
               <a href="#como-funciona">
                 <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 h-12 text-base">
                   <Play className="w-4 h-4 mr-2" />
@@ -534,14 +535,15 @@ export default function Landing() {
             Junte-se a equipes que já usam o NandiFlow para atender mais rápido e com mais qualidade no WhatsApp.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button
-              size="lg"
-              onClick={() => openCheckout()}
-              className="bg-green-500 hover:bg-green-600 text-white px-10 h-12 text-base"
-            >
-              Quero melhorar meu atendimento
-              <ArrowRight className="ml-2 w-4 h-4" />
-            </Button>
+            <a href="#planos">
+              <Button
+                size="lg"
+                className="bg-green-500 hover:bg-green-600 text-white px-10 h-12 text-base"
+              >
+                Quero melhorar meu atendimento
+                <ArrowRight className="ml-2 w-4 h-4" />
+              </Button>
+            </a>
             <Link to="/auth">
               <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 h-12 text-base">
                 Já tenho conta — Entrar
