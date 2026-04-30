@@ -87,9 +87,45 @@ export function UserMenu() {
           <UserIcon className="mr-2 h-4 w-4" />
           <span>Perfil</span>
         </DropdownMenuItem>
-        
+
         <DropdownMenuSeparator />
-        
+
+        <DropdownMenuItem onClick={toggleMode}>
+          {mode === 'dark' ? (
+            <Sun className="mr-2 h-4 w-4" />
+          ) : (
+            <Moon className="mr-2 h-4 w-4" />
+          )}
+          <span>{mode === 'dark' ? 'Tema claro' : 'Tema escuro'}</span>
+        </DropdownMenuItem>
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <PaletteIcon className="mr-2 h-4 w-4" />
+            <span>Paleta de cores</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent className="w-48">
+              {PALETTES.map((p) => (
+                <DropdownMenuItem
+                  key={p.id}
+                  onClick={() => setPalette(p.id as Palette)}
+                  className="flex items-center gap-2"
+                >
+                  <span
+                    className="h-4 w-4 rounded-full border border-border"
+                    style={{ background: p.swatch }}
+                  />
+                  <span className="flex-1">{p.label}</span>
+                  {palette === p.id && <Check className="h-4 w-4 text-primary" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
+
+        <DropdownMenuSeparator />
+
         <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
           <LogOut className="mr-2 h-4 w-4" />
           <span>Sair</span>
