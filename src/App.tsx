@@ -17,6 +17,7 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Redeploy trigger: no functional changes.
 const App = () => {
 
   return (
