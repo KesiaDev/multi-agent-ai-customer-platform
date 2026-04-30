@@ -31,19 +31,20 @@ export interface UsageMetric {
 
 export function useOrgBilling() {
   const { organization, isAdmin, isOwner } = useAuth();
+  const supabaseAny = supabase as any;
 
   const { data: subscription, isLoading: isLoadingSubscription } = useQuery({
     queryKey: ['org-subscription', organization?.id],
     enabled: !!organization?.id && (isAdmin || isOwner),
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAny
         .from('subscriptions')
         .select('id, plan, status, trial_ends_at, current_period_start, current_period_end, next_due_date, amount')
         .eq('organization_id', organization!.id)
         .maybeSingle();
 
       if (error) throw error;
-      return data as Subscription | null;
+      return data as unknown as Subscription | null;
     },
   });
 
@@ -52,14 +53,14 @@ export function useOrgBilling() {
     enabled: !!(subscription?.plan ?? organization?.plan),
     queryFn: async () => {
       const plan = subscription?.plan ?? organization?.plan ?? 'conexao';
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAny
         .from('plan_quotas')
         .select('*')
         .eq('plan', plan)
         .single();
 
       if (error) throw error;
-      return data as PlanQuota;
+      return data as unknown as PlanQuota;
     },
   });
 
@@ -68,7 +69,7 @@ export function useOrgBilling() {
     queryKey: ['usage-metrics', organization?.id, now.getFullYear(), now.getMonth() + 1],
     enabled: !!organization?.id && (isAdmin || isOwner),
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAny
         .from('usage_metrics')
         .select('messages_count, conversations_count, ai_calls_count, period_year, period_month')
         .eq('organization_id', organization!.id)
@@ -91,7 +92,7 @@ export function useOrgBilling() {
     queryKey: ['usage-metrics-history', organization?.id],
     enabled: !!organization?.id && (isAdmin || isOwner),
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAny
         .from('usage_metrics')
         .select('messages_count, ai_calls_count, period_year, period_month')
         .eq('organization_id', organization!.id)
@@ -100,7 +101,7 @@ export function useOrgBilling() {
         .limit(6);
 
       if (error) throw error;
-      return (data ?? []) as UsageMetric[];
+      return (data ?? []) as unknown as UsageMetric[];
     },
   });
 
