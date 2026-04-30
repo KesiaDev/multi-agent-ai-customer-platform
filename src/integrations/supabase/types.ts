@@ -68,6 +68,88 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          organization_id: string | null
+          resource_id: string | null
+          resource_type: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          organization_id?: string | null
+          resource_id?: string | null
+          resource_type?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          organization_id?: string | null
+          resource_id?: string | null
+          resource_type?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_events: {
+        Row: {
+          amount: number | null
+          asaas_payment_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          organization_id: string | null
+          payload: Json | null
+          status: string | null
+        }
+        Insert: {
+          amount?: number | null
+          asaas_payment_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          organization_id?: string | null
+          payload?: Json | null
+          status?: string | null
+        }
+        Update: {
+          amount?: number | null
+          asaas_payment_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          organization_id?: string | null
+          payload?: Json | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_assignments: {
         Row: {
           assigned_by: string | null
@@ -127,6 +209,95 @@ export type Database = {
           },
         ]
       }
+      organization_members: {
+        Row: {
+          created_at: string
+          id: string
+          organization_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organization_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organization_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_members_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          plan: string
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          plan?: string
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          plan?: string
+          slug?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      plan_quotas: {
+        Row: {
+          created_at: string
+          max_conversations_per_month: number
+          max_instances: number
+          max_members: number
+          plan: string
+          price_brl: number
+        }
+        Insert: {
+          created_at?: string
+          max_conversations_per_month?: number
+          max_instances?: number
+          max_members?: number
+          plan: string
+          price_brl?: number
+        }
+        Update: {
+          created_at?: string
+          max_conversations_per_month?: number
+          max_instances?: number
+          max_members?: number
+          plan?: string
+          price_brl?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -136,6 +307,7 @@ export type Database = {
           id: string
           is_active: boolean
           is_approved: boolean | null
+          organization_id: string | null
           status: string | null
           updated_at: string | null
         }
@@ -147,6 +319,7 @@ export type Database = {
           id: string
           is_active?: boolean
           is_approved?: boolean | null
+          organization_id?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -158,10 +331,19 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_approved?: boolean | null
+          organization_id?: string | null
           status?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       project_config: {
         Row: {
@@ -187,6 +369,100 @@ export type Database = {
         }
         Relationships: []
       }
+      quota_alerts: {
+        Row: {
+          created_at: string
+          id: string
+          metric: string
+          organization_id: string
+          period_month: number
+          period_year: number
+          threshold_pct: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metric: string
+          organization_id: string
+          period_month: number
+          period_year: number
+          threshold_pct: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metric?: string
+          organization_id?: string
+          period_month?: number
+          period_year?: number
+          threshold_pct?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quota_alerts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          amount: number | null
+          asaas_customer_id: string | null
+          asaas_subscription_id: string | null
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          next_due_date: string | null
+          organization_id: string
+          plan: string
+          status: string
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          asaas_customer_id?: string | null
+          asaas_subscription_id?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          next_due_date?: string | null
+          organization_id: string
+          plan?: string
+          status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          asaas_customer_id?: string | null
+          asaas_subscription_id?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          next_due_date?: string | null
+          organization_id?: string
+          plan?: string
+          status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           created_at: string
@@ -207,6 +483,50 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      usage_metrics: {
+        Row: {
+          ai_calls_count: number
+          conversations_count: number
+          created_at: string
+          id: string
+          messages_count: number
+          organization_id: string
+          period_month: number
+          period_year: number
+          updated_at: string
+        }
+        Insert: {
+          ai_calls_count?: number
+          conversations_count?: number
+          created_at?: string
+          id?: string
+          messages_count?: number
+          organization_id: string
+          period_month: number
+          period_year: number
+          updated_at?: string
+        }
+        Update: {
+          ai_calls_count?: number
+          conversations_count?: number
+          created_at?: string
+          id?: string
+          messages_count?: number
+          organization_id?: string
+          period_month?: number
+          period_year?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_metrics_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -465,6 +785,7 @@ export type Database = {
           instance_name: string
           metadata: Json | null
           name: string
+          organization_id: string | null
           provider_type: string
           qr_code: string | null
           status: string | null
@@ -477,6 +798,7 @@ export type Database = {
           instance_name: string
           metadata?: Json | null
           name: string
+          organization_id?: string | null
           provider_type?: string
           qr_code?: string | null
           status?: string | null
@@ -489,12 +811,21 @@ export type Database = {
           instance_name?: string
           metadata?: Json | null
           name?: string
+          organization_id?: string | null
           provider_type?: string
           qr_code?: string | null
           status?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instances_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_macros: {
         Row: {
@@ -837,6 +1168,22 @@ export type Database = {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
       }
+      get_orgs_near_quota: {
+        Args: { p_month: number; p_year: number }
+        Returns: {
+          current_value: number
+          metric: string
+          organization_id: string
+          plan: string
+          quota_limit: number
+          threshold_pct: number
+        }[]
+      }
+      get_user_organization_id: { Args: { _user_id: string }; Returns: string }
+      has_org_role: {
+        Args: { _org_id: string; _roles: string[]; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -844,7 +1191,30 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_usage_metric: {
+        Args: {
+          p_increment?: number
+          p_metric: string
+          p_organization_id: string
+        }
+        Returns: undefined
+      }
       is_first_user: { Args: never; Returns: boolean }
+      is_org_member: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      write_audit_log: {
+        Args: {
+          p_action: string
+          p_metadata?: Json
+          p_organization_id: string
+          p_resource_id?: string
+          p_resource_type?: string
+          p_user_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "supervisor" | "agent"
