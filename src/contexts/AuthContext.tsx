@@ -14,7 +14,6 @@ interface Profile {
   avatar_url: string | null;
   status: 'online' | 'offline' | 'away' | 'busy';
   is_approved: boolean;
-  organization_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('❌ [AuthContext] Error loading profile:', profileError);
       } else if (profileData) {
         console.log('✅ [AuthContext] Profile loaded:', profileData);
-        setProfile(profileData as Profile);
+        setProfile(profileData as unknown as Profile);
       } else {
         console.warn('⚠️ [AuthContext] No profile found for user:', userId);
       }
@@ -136,7 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Load organization membership
-      const { data: membershipData, error: membershipError } = await supabase
+      const supabaseAny = supabase as any;
+      const { data: membershipData, error: membershipError } = await supabaseAny
         .from('organization_members')
         .select('role, organizations(id, name, slug, plan, status)')
         .eq('user_id', userId)
