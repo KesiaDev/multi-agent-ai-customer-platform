@@ -34,6 +34,7 @@ const roleLabels = {
 
 export function UserMenu() {
   const { profile, role, signOut } = useAuth();
+  const { mode, palette, toggleMode, setPalette } = useTheme();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const navigate = useNavigate();
 
