@@ -2,12 +2,93 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Bot, Users, BarChart3, Zap, MessageSquare, CheckCircle, ArrowRight,
-  Star, TrendingUp, Headphones, Shield, Clock, ChevronRight, Play,
+  Star, TrendingUp, Headphones, Shield, Play,
   Inbox, Tag, FileText, ListFilter, CreditCard,
+  Radar, BrainCircuit, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SubscriptionCheckoutDialog } from "@/components/settings/SubscriptionCheckoutDialog";
+
+/* ─── NandiDev product family bar ───────────────────────────────────────── */
+
+const NANDI_PRODUCTS = [
+  {
+    id: "multiagente",
+    label: "Atendimento Multi-Agente",
+    icon: Headphones,
+    href: "#",
+    active: true,
+    badge: null,
+  },
+  {
+    id: "sdr",
+    label: "SDR Inteligente",
+    icon: BrainCircuit,
+    href: "https://nandidev.com.br/sdr",
+    active: false,
+    badge: "Em breve",
+  },
+  {
+    id: "radar",
+    label: "Radar Comercial",
+    icon: Radar,
+    href: "https://nandidev.com.br/radar",
+    active: false,
+    badge: "Em breve",
+  },
+  {
+    id: "ia",
+    label: "IA Generativa",
+    icon: Sparkles,
+    href: "https://nandidev.com.br/ia",
+    active: false,
+    badge: "Em breve",
+  },
+];
+
+function NandiProductBar() {
+  return (
+    <div className="border-b border-white/5 bg-[#07070f] px-6 py-0">
+      <div className="max-w-6xl mx-auto flex items-center gap-1 overflow-x-auto scrollbar-hide">
+        {/* NandiDev brand */}
+        <a
+          href="https://nandidev.com.br"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 pr-5 border-r border-white/10 mr-3 shrink-0 py-3"
+        >
+          <div className="w-5 h-5 bg-green-500 rounded flex items-center justify-center">
+            <MessageSquare className="w-3 h-3 text-white" />
+          </div>
+          <span className="text-sm font-bold text-white/80">NandiDev</span>
+        </a>
+
+        {/* Products */}
+        {NANDI_PRODUCTS.map((p) => (
+          <a
+            key={p.id}
+            href={p.href}
+            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-medium whitespace-nowrap border-b-2 transition-all shrink-0 ${
+              p.active
+                ? "border-green-500 text-green-400"
+                : "border-transparent text-white/40 hover:text-white/70 cursor-default"
+            }`}
+            onClick={p.active ? (e) => e.preventDefault() : undefined}
+          >
+            <p.icon className="w-3.5 h-3.5" />
+            {p.label}
+            {p.badge && (
+              <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-white/5 text-white/30 border border-white/10">
+                {p.badge}
+              </span>
+            )}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /* ─── data ──────────────────────────────────────────────────────────────── */
 
@@ -195,6 +276,9 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">
+
+      {/* ── NandiDev product family bar ──────────────────────────────────── */}
+      <NandiProductBar />
 
       {/* ── Nav ──────────────────────────────────────────────────────────── */}
       <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0f]/90 backdrop-blur-md px-6 py-4">
