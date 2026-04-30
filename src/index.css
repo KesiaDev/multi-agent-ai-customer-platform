@@ -116,3 +116,94 @@ All colors MUST be HSL.
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ============================================
+   Color Palettes — override primary tokens
+   Apply via root class: .palette-{name}
+   ============================================ */
+
+/* GREEN (default) — already set in :root, but explicit class for completeness */
+.palette-green {
+  --primary: 142 76% 36%;
+  --ring: 142 76% 36%;
+  --success: 142 76% 36%;
+  --sidebar-primary: 142 76% 36%;
+  --sidebar-ring: 142 76% 36%;
+}
+.dark.palette-green {
+  --primary: 142 70% 45%;
+  --ring: 142 70% 45%;
+  --sidebar-primary: 142 70% 45%;
+  --sidebar-ring: 142 70% 45%;
+}
+
+/* BLUE */
+.palette-blue {
+  --primary: 217 91% 50%;
+  --ring: 217 91% 50%;
+  --sidebar-primary: 217 91% 50%;
+  --sidebar-ring: 217 91% 50%;
+}
+.dark.palette-blue {
+  --primary: 217 91% 60%;
+  --ring: 217 91% 60%;
+  --sidebar-primary: 217 91% 60%;
+  --sidebar-ring: 217 91% 60%;
+}
+
+/* PURPLE */
+.palette-purple {
+  --primary: 262 80% 55%;
+  --ring: 262 80% 55%;
+  --sidebar-primary: 262 80% 55%;
+  --sidebar-ring: 262 80% 55%;
+}
+.dark.palette-purple {
+  --primary: 262 80% 65%;
+  --ring: 262 80% 65%;
+  --sidebar-primary: 262 80% 65%;
+  --sidebar-ring: 262 80% 65%;
+}
+
+/* ORANGE */
+.palette-orange {
+  --primary: 24 95% 53%;
+  --ring: 24 95% 53%;
+  --sidebar-primary: 24 95% 53%;
+  --sidebar-ring: 24 95% 53%;
+}
+.dark.palette-orange {
+  --primary: 24 95% 60%;
+  --ring: 24 95% 60%;
+  --sidebar-primary: 24 95% 60%;
+  --sidebar-ring: 24 95% 60%;
+}
+
+/* ROSE */
+.palette-rose {
+  --primary: 346 80% 55%;
+  --ring: 346 80% 55%;
+  --sidebar-primary: 346 80% 55%;
+  --sidebar-ring: 346 80% 55%;
+}
+.dark.palette-rose {
+  --primary: 346 80% 62%;
+  --ring: 346 80% 62%;
+  --sidebar-primary: 346 80% 62%;
+  --sidebar-ring: 346 80% 62%;
+}
+
+/* SLATE / GRAPHITE */
+.palette-slate {
+  --primary: 215 28% 27%;
+  --ring: 215 28% 27%;
+  --sidebar-primary: 215 28% 27%;
+  --sidebar-ring: 215 28% 27%;
+}
+.dark.palette-slate {
+  --primary: 215 20% 65%;
+  --ring: 215 20% 65%;
+  --primary-foreground: 215 28% 12%;
+  --sidebar-primary: 215 20% 65%;
+  --sidebar-ring: 215 20% 65%;
+}
