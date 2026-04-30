@@ -12,3 +12,4 @@ export { InstanceSetupCollapsible } from "./InstanceSetupCollapsible";
 export { SetupGuideCollapsible } from "./SetupGuideCollapsible";
 export { SecuritySettings } from "./SecuritySettings";
 export { OrgBillingPanel } from "./OrgBillingPanel";
+export { SubscriptionCheckoutDialog } from "./SubscriptionCheckoutDialog";

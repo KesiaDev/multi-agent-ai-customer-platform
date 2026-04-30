@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrgBilling } from "@/hooks/useOrgBilling";
+import { SubscriptionCheckoutDialog } from "./SubscriptionCheckoutDialog";
 import { Building2, CreditCard, MessageSquare, Bot, Zap, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -52,6 +55,7 @@ function UsageBar({ label, used, total, icon: Icon }: {
 export function OrgBillingPanel() {
   const { organization } = useAuth();
   const { subscription, planQuota, currentUsage, isLoading } = useOrgBilling();
+  const [showCheckout, setShowCheckout] = useState(false);
 
   if (isLoading) {
     return (
@@ -178,7 +182,7 @@ export function OrgBillingPanel() {
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
               <CreditCard className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
-              <div>
+              <div className="flex-1">
                 <p className="font-medium text-orange-800 dark:text-orange-200">
                   {status === 'trial' ? 'Você está no período de trial' : 'Pagamento pendente'}
                 </p>
@@ -187,11 +191,20 @@ export function OrgBillingPanel() {
                     ? 'Ative sua assinatura para garantir continuidade do serviço após o trial.'
                     : 'Regularize seu pagamento para evitar suspensão do serviço.'}
                 </p>
+                <Button
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => setShowCheckout(true)}
+                >
+                  {status === 'trial' ? 'Ativar assinatura' : 'Regularizar pagamento'}
+                </Button>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
+
+      <SubscriptionCheckoutDialog open={showCheckout} onOpenChange={setShowCheckout} />
     </div>
   );
 }
